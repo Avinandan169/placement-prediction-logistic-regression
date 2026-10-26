@@ -1,214 +1,203 @@
-# 🎓 Placement Prediction System: ML Audit, Model Analytics & Interactive Dashboard
+# Placement Prediction System
 
-A machine learning analytics platform and interactive web application for student placement prediction, built using **Logistic Regression**, **Scikit-Learn**, **Plotly**, and **Streamlit**.
+An interactive machine-learning dashboard that explores student placement data and estimates placement probability using **Logistic Regression**, **scikit-learn**, **Pandas**, **Plotly**, and **Streamlit**.
 
-The project features a verified machine learning pipeline, data leakage prevention, cross-validation threshold tuning, and an academic analytics dashboard designed for university project demonstrations and viva examinations.
+The application is organized into three sections: **Overview**, **Model Analysis**, and **Predict Placement**.
 
----
+> **Project context:** This is an educational demonstration of a binary classification workflow. Predictions are estimates from the available dataset, not guarantees about an individual student's placement outcome.
 
-## 📌 1. Project Overview & Workflow
+## Frontend Preview
 
-Student placement prediction is formulated as a supervised binary classification problem:
-* `0` → **Not Placed** (Negative Class)
-* `1` → **Placed** (Positive Class)
+The following screenshots show the Streamlit interface and its main user flows.
 
-### End-to-End Pipeline Architecture
+### Overview dashboard
 
-```text
-               placement.csv (10,000 Records)
-                            │
-               Remove 'College_ID' (Identifier)
-               Target Encoding ('No': 0, 'Yes': 1)
-               One-Hot Encoding ('Internship_Experience')
-                            │
-               Stratified Train/Test Split (80/20, seed=42)
-               ┌────────────┴────────────┐
-               ▼                         ▼
-         X_train (8,000)           X_test (2,000 Held-Out)
-               │                         │
-     StandardScaler (fit_transform)      │
-               │                         │
-     Logistic Regression (L2)            │
-     5-Fold Stratified CV on Train       │
-     (Optimal Threshold Tuning = 0.36)   │
-               │                         │
-               ├─────────────────────────┤ (transform only)
-               ▼                         ▼
-     Trained Model & Scaler ──────> Evaluation Suite:
-                                    • Confusion Matrix (TN, FP, FN, TP)
-                                    • Accuracy, Precision, Recall, F1
-                                    • ROC Curve & ROC-AUC (0.9451)
-                                    • PR Curve & PR-AUC (0.7793)
-                                    • Threshold Sensitivity Sweep
-                                         │
-                                         ▼
-                            Interactive Streamlit Dashboard
-```
+![Overview dashboard showing dataset KPIs, placement distribution, and CGPA distribution](docs/screenshots/01-overview.png)
 
----
+### Model evaluation
 
-## 🔍 2. Phase One & Two — ML Technical Audit & Findings
+![Model Analysis tab showing the confusion matrix and ROC curve](docs/screenshots/02-model-analysis.png)
 
-During the technical audit of the original codebase (`app.py`, `placement.ipynb`, saved `.pkl` files), the following key findings were identified and resolved:
+### Feature and correlation analysis
 
-### A. The Decision Threshold Bug (Loop Iteration Variable Leak)
-* **Issue Discovered**: In `placement.ipynb` cell 398, a for-loop was executed to evaluate thresholds:
-  ```python
-  for threshold in [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]:
-      ...
-  joblib.dump(threshold, "threshold.pkl")  # Leaked loop variable = 0.80!
-  ```
-  Consequently, `threshold.pkl` stored `0.80`. When `app.py` loaded this file, it applied `probability >= 0.80`, causing:
-  - **Severe Recall Collapse**: Test recall dropped from **58.73%** (at 0.50) to **31.63%** (at 0.80).
-  - **Excessive False Negatives**: 227 placed students out of 332 were misclassified as "Not Placed" (68.4% missed opportunity rate).
-* **Fix Applied**: 
-  - Synchronized `threshold.pkl` to the standard default of `0.50` (or `0.36` for CV F1-optimal).
-  - Implemented an interactive **Threshold Sensitivity Controller** in the Streamlit dashboard, allowing real-time switching between Default (`0.50`), CV-Tuned (`0.36`), and Conservative (`0.80`), keeping all metrics and confusion matrices 100% consistent with the active threshold.
+![Correlation heatmap and Logistic Regression coefficient chart](docs/screenshots/03-feature-analysis.png)
 
-### B. Prevention of Data Leakage
-* **Verification**: `StandardScaler` is fitted strictly on `X_train` (`fit_transform`) and only applied (`transform`) to `X_test` and single student inferences.
-* **Threshold Tuning Isolation**: Decision threshold tuning was conducted strictly on `X_train` using 5-fold stratified cross-validation (reaching optimal F1 at `0.36`), leaving the 2,000-record test set completely untouched.
+### Placement prediction form
 
-### C. Collinearity & The Dummy Variable Trap
-* **Finding**: `Internship_Experience` was one-hot encoded into both `Internship_Experience_No` and `Internship_Experience_Yes`, which are perfectly collinear ($No + Yes = 1$). In unregularized regression this causes singularity, but the scikit-learn Logistic Regression L2 penalty ($C=1.0$) handles it smoothly. Standardized coefficients for both reflect equal and opposite negligible weights ($\pm 0.0074$).
+![Student information form used to generate a placement prediction](docs/screenshots/04-prediction-form.png)
 
-### D. Dataset Nature & Scientific Limitations
-* **Provenance**: The dataset contains 10,000 records across 100 college IDs (`CLG0001` - `CLG0100`).
-* **Statistical Characteristics**: Zero missing values and zero duplicates. Features like IQ, CGPA, and Communication Skills exhibit smooth, statistically generated distributions with clear correlations, while `Internship_Experience` (16.77% vs 16.32% placement rate) and `Academic_Performance` exhibit near-zero correlation with placement.
-* **Disclosure**: This is an educational benchmark/synthetic dataset. High evaluation scores demonstrate algorithm learning capability but do not guarantee real-world campus recruitment outcomes.
+### Prediction result
 
----
+![Example prediction result with estimated placement probability](docs/screenshots/05-prediction-result.png)
 
-## 📊 3. Model Evaluation & Ground-Truth Performance
+## Contents
 
-All metrics below are computed from the verified held-out test set (2,000 students) and 5-fold cross-validation on training data.
+- [Overview](#overview)
+- [Features](#features)
+- [Model and evaluation](#model-and-evaluation)
+- [Technology stack](#technology-stack)
+- [Run locally](#run-locally)
+- [Project files](#project-files)
+- [Limitations](#limitations)
+- [Attribution](#attribution)
 
-### Overall Performance Summary
+## Overview
 
-| Metric | Default Threshold (`0.50`) | CV-Tuned F1-Optimal (`0.36`) | Conservative (`0.80`) | Random Baseline |
-| :--- | :---: | :---: | :---: | :---: |
-| **Accuracy** | **90.35%** | 90.25% | 88.10% | 83.41% (Majority) |
-| **Precision** | **77.69%** | 70.09% | 90.52% | 16.59% |
-| **Recall (Sensitivity)** | **58.73%** | **71.69%** | 31.63% | 100.0% (Trivial) |
-| **F1-Score** | **0.6690** | **0.7088** | 0.4688 | 0.2846 |
-| **Specificity (TNR)** | **96.64%** | 93.94% | 99.34% | 0.00% |
-| **ROC-AUC** | **0.9451** | **0.9451** | **0.9451** | 0.5000 |
-| **PR-AUC (Avg Precision)** | **0.7793** | **0.7793** | **0.7793** | 0.1659 |
+The model treats placement as a binary classification task:
 
-### Held-Out Confusion Matrix Breakdown (Test Set, n = 2,000)
+- `0` — Not Placed
+- `1` — Placed
 
-#### At Default Threshold (`0.50`):
-```text
-                     Predicted: Not Placed (0)    Predicted: Placed (1)
-Actual: Not Placed (0)         1612 (TN)                   56 (FP)
-Actual: Placed (1)              137 (FN)                  195 (TP)
-```
-* **True Negatives (TN = 1612, 80.6%)**: Correctly identified unplaced candidates.
-* **False Positives (FP = 56, 2.8%)**: Type I Error — Students predicted as placed who were not.
-* **False Negatives (FN = 137, 6.85%)**: Type II Error — Capable students overlooked by the model.
-* **True Positives (TP = 195, 9.75%)**: Correctly identified placed candidates.
+The dashboard summarizes the dataset, presents evaluation results, and lets a user enter student attributes to receive a model-estimated placement probability.
 
-#### At CV-Tuned Threshold (`0.36`):
-```text
-                     Predicted: Not Placed (0)    Predicted: Placed (1)
-Actual: Not Placed (0)         1567 (TN)                  101 (FP)
-Actual: Placed (1)               94 (FN)                  238 (TP)
-```
-* Boosts Recall from **58.73% to 71.69%** (detecting 43 more placed students) with balanced F1 of **0.7088**.
+## Features
 
----
+### 1. Overview
 
-## 📈 4. Feature Importance & Model Coefficients
+- Dataset record count and placement rate
+- Test accuracy and F1-score summary cards
+- Placement-outcome distribution chart
+- CGPA distribution compared by placement outcome
 
-Because all features are standardized using `StandardScaler` ($\mu=0, \sigma=1$), the model coefficients ($\beta_i$) represent the change in log-odds of placement per **one standard deviation** increase in that feature:
+### 2. Model Analysis
 
-$$\log\left(\frac{p}{1-p}\right) = \beta_0 + \sum_{i=1}^n \beta_i \left(\frac{x_i - \mu_i}{\sigma_i}\right)$$
+- Confusion matrix
+- Receiver Operating Characteristic (ROC) curve and ROC-AUC
+- Correlation heatmap
+- Logistic Regression coefficient chart
+- Detailed classification report
 
-| Feature Name | Display Name | Standardized $\beta_i$ | Odds Ratio ($e^{\beta_i}$) | Impact Category |
-| :--- | :--- | :---: | :---: | :--- |
-| `Communication_Skills` | Communication Skills Score | **+1.8756** | **6.52** | Primary Positive Driver |
-| `IQ` | Student IQ Score | **+1.6252** | **5.08** | Strong Positive Driver |
-| `CGPA` | Cumulative GPA | **+1.4834** | **4.41** | Strong Academic Driver |
-| `Projects_Completed` | Number of Projects | **+1.1784** | **3.25** | Practical Skills Driver |
-| `Prev_Sem_Result` | Previous Semester GPA | **+0.3339** | **1.40** | Moderate Positive Driver |
-| `Internship_Experience_Yes` | Internship (Yes) | **+0.0074** | 1.01 | Negligible in this dataset |
-| `Internship_Experience_No` | Internship (No) | **-0.0074** | 0.99 | Negligible in this dataset |
-| `Academic_Performance` | Faculty Academic Rating | **-0.0108** | 0.99 | Negligible in this dataset |
-| `Extra_Curricular_Score` | Extra-Curricular Score | **-0.0440** | 0.96 | Negligible in this dataset |
-| **Model Intercept ($\beta_0$)** | — | **-3.6564** | 0.026 | Reflects ~16.6% base rate |
+### 3. Predict Placement
 
----
+The prediction form accepts the following attributes:
 
-## 🖥️ 5. Dashboard Architecture & Visualizations
+- IQ score
+- Previous-semester result
+- CGPA
+- Academic performance rating
+- Communication skills score
+- Projects completed
+- Extra-curricular score
+- Internship experience
 
-The web application is structured into five logical, graph-rich tabs:
+After submission, the app displays a predicted placement outcome and estimated probability. This is a model output, not a promise of employment.
 
-1. **📊 Executive Overview**:
-   - 6 KPI metric cards (Total Records, Imbalance %, Test Accuracy, F1-score, ROC-AUC, PR-AUC).
-   - Interactive Plotly Donut Chart of class distribution.
-   - Comprehensive Metric Summary Bar Chart comparing test-set scores against baselines.
-   - Callout box explaining the Accuracy Paradox in imbalanced datasets.
+## Model and evaluation
 
-2. **🔍 Exploratory Data Analysis (EDA)**:
-   - Interactive feature distribution (Histogram + Box plot overlay) segmented by placement outcome.
-   - Feature-vs-Target grouped box plots showing median shifts.
-   - Full 8x8 Pearson Correlation Heatmap with interactive tooltips.
-   - Categorical analysis of Internship Experience vs placement rates.
-   - Expandable dataset statistical summary table (mean, std, percentiles).
+The current dashboard reports the following results for a held-out test set of 2,000 records:
 
-3. **🎯 Confusion Matrix & Model Performance (High Priority)**:
-   - Real-time decision threshold slider (0.10 to 0.90) and preset buttons (Default 0.50, F1-Optimal 0.36, Conservative 0.80).
-   - Interactive Confusion Matrix Heatmap displaying exact counts and cell percentages.
-   - Detailed breakdown cards for TN, FP, FN, and TP with campus recruitment implications.
-   - Interactive ROC Curve with operating point marker and diagonal baseline (AUC = 0.9451).
-   - Precision-Recall Curve with baseline and operating point marker (AP = 0.7793).
-   - Dynamic Threshold Sensitivity line plot (Precision, Recall, F1, Accuracy vs Threshold).
-   - Scikit-Learn Classification Report table.
+| Measure | Reported result |
+|---|---:|
+| Dataset records | 10,000 |
+| Placement rate | 16.6% |
+| Test accuracy | 90.35% |
+| Test F1-score | 0.669 |
+| ROC-AUC | 0.9451 |
 
-4. **📈 Feature Importance & Interpretability**:
-   - Standardized coefficient horizontal bar chart with color-coded positive/negative contributions.
-   - Odds Ratio table per standard deviation.
-   - Mathematical formulation and viva explanation of logit transformation and feature scaling.
+The displayed confusion matrix at the default threshold of `0.50` is:
 
-5. **🔮 Student Placement Predictor**:
-   - Two-column input layout for academic and practical attributes.
-   - 4 quick-test preset profiles: "Star Candidate", "Average Candidate", "Needs Improvement", "High CGPA/Low Comm".
-   - Real-time placement outcome card with circular probability gauge.
-   - Feature contribution waterfall chart showing how each specific student score shifted the prediction.
-   - Actionable student guidance and viva disclaimer.
+|  | Predicted: Not Placed | Predicted: Placed |
+|---|---:|---:|
+| **Actual: Not Placed** | 1,612 (TN) | 56 (FP) |
+| **Actual: Placed** | 137 (FN) | 195 (TP) |
 
----
+Accuracy alone can be misleading when classes are imbalanced. The confusion matrix, F1-score, recall, precision, and ROC-AUC provide additional context about model performance.
 
-## 🚀 6. Setup and Execution Instructions
+**Reproducibility note:** These values are the results currently shown in the supplied dashboard screenshots. Re-run the training/evaluation workflow before treating them as independently verified results or comparing them with another model.
+
+## Technology stack
+
+- **Python** — application and model workflow
+- **Streamlit** — interactive web interface
+- **Pandas / NumPy** — data handling
+- **scikit-learn** — preprocessing and Logistic Regression evaluation
+- **Plotly** — interactive charts
+- **Joblib / pickle artifacts** — loading saved model-related objects, if used by the current implementation
+
+## Run locally
 
 ### Prerequisites
-- macOS / Linux / Windows
-- Python 3.9+ (Python 3.11 recommended)
 
-### Step 1: Clone or Navigate to Directory
+- Python 3.9 or later
+- Git (if cloning a repository)
+
+### 1. Get the project
+
+If you have cloned your own repository, move into its project directory:
+
 ```bash
-cd "placement project work/placementmlproject"
+cd path/to/placement-prediction-project
 ```
 
-### Step 2: Create and Activate Virtual Environment
+### 2. Create and activate a virtual environment
+
+**macOS / Linux**
+
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate        # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 ```
 
-### Step 3: Install Required Dependencies
+**Windows PowerShell**
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 4: Run the Streamlit Application
+### 4. Start the application
+
 ```bash
 streamlit run app.py
 ```
 
-Open your browser at `http://localhost:8501`.
+If the default port is unavailable, specify another port:
+
+```bash
+streamlit run app.py --server.port 8501 --server.headless true
+```
+
+Open the local URL printed by Streamlit, commonly `http://localhost:8501`.
+
+## Project files
+
+The repository may include files such as the following; exact contents depend on the current checkout.
+
+| File | Purpose |
+|---|---|
+| `app.py` | Streamlit application interface |
+| `ml_engine.py` | Model and prediction helper logic, if present |
+| `placement.csv` | Dataset used by the project |
+| `placement_model.pkl` | Saved model artifact, if present |
+| `scaler.pkl` | Saved feature scaler, if present |
+| `features.pkl` | Saved feature metadata, if present |
+| `threshold.pkl` | Saved classification threshold, if present |
+| `placement.ipynb` | Exploratory analysis or training notebook, if present |
+| `requirements.txt` | Python dependencies |
+| `docs/screenshots/` | README frontend screenshots |
+
+Keep the model artifacts and preprocessing steps consistent with one another. If the model is retrained or the feature order changes, regenerate and validate the related artifacts together.
+
+## Limitations
+
+- The dataset should be treated as an educational benchmark unless its real-world provenance and collection process are independently documented.
+- Model performance on this dataset does not establish performance on students from other institutions, cohorts, or recruitment processes.
+- Associations learned by Logistic Regression do not prove that a feature causes placement.
+- The probability shown by the app is model-estimated and may not be calibrated for real-world use.
+- The system should not be used as the sole basis for hiring, placement eligibility, or denying a student access to opportunities.
+
+## Attribution
+
+This repository is an adaptation and extension of an existing student placement prediction project. Please retain the original project's license and any attribution required by its terms. Do not assume that the absence of inherited Git commits removes those obligations.
+
+Before redistributing the project, check the upstream repository's license and include the required license/notice text. If no license is provided, do not assume that the source code is automatically licensed for redistribution.
 
 ---
 
-## 📄 License & Attribution
-Developed for academic demonstration and machine learning audit purposes in B.Tech Computer Science & Engineering.
+Built as a student machine-learning project for exploration, demonstration, and learning.
